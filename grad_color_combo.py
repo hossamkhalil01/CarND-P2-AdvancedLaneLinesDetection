@@ -68,13 +68,13 @@ def grad_combined (img):
     gray = cv2.cvtColor(img,cv2.COLOR_RGB2GRAY)
 
     #Sobelx
-    sobelx = grad_xy (gray,1,(30,255),15)
+    sobelx = grad_xy (gray,1,(70,255),7)
 
     #Sobely
-    sobely = grad_xy (gray,0,(30,255),15)
+    sobely = grad_xy (gray,0,(70,255),7)
 
     #Magnitude
-    sobelMagn = grad_magn (gray,(30,255),15)
+    sobelMagn = grad_magn (gray,(70,255),7)
 
     #Gradient Direction
     gradDir = grad_dir (gray,(0.7,1.3),15)
