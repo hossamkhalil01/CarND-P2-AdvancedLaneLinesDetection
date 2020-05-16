@@ -282,6 +282,8 @@ In step 7. after calling `drawResults()` function to receive the original image 
 
 **Note**: For the video stream demo please check the [project_video](https://github.com/HossamKhalil-hub01/CarND-P2--AdvancedLaneLinesDetection/tree/master/output_vids)
 
+---
+
 ## Usage
 
 Use the `Lane_detection()` function and input the image or the video frame to be processed, if it is required to use the full pipline. otherwise you can use any step of the process individually.
@@ -291,6 +293,7 @@ At the very last section in `Advanced_LaneLines.py` a demo is included to proces
 **Note** : The `Lane_detection()` function has a visualization for each step. Feel free to uncomment the visualization section of any stage to visuzlize and save the results.
 
 
+---
 
 ## Dependencies
 
@@ -301,6 +304,7 @@ At the very last section in `Advanced_LaneLines.py` a demo is included to proces
 * [moviepy](https://zulko.github.io/moviepy/)
 
 
+---
 
 ## Limitations
 As it performs quite well in normal conditions, but the detection can fail to track two cases :
