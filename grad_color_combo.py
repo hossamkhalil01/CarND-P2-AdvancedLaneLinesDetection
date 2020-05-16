@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
-import matplotlib.image as im
 
+#Compute Gradient in x or y direction depending on orient variable
 def grad_xy (gray, orient = 1, thresh = ( 0 , 255)  , ksize = 3 ):
 
 
@@ -23,7 +23,7 @@ def grad_xy (gray, orient = 1, thresh = ( 0 , 255)  , ksize = 3 ):
     binary_output [(sobel_scale >= thresh[0]) & (sobel_scale <= thresh[1])] = 1
 
     return binary_output
-
+#Compute gradient magnitude
 def grad_magn (gray, thresh = ( 0 ,  255) , ksize = 3):
 
     #Sobelx
@@ -43,7 +43,7 @@ def grad_magn (gray, thresh = ( 0 ,  255) , ksize = 3):
     binary_output [ (sobelmagn >= thresh[0]) & (sobelmagn <= thresh[1])] =1
 
     return binary_output
-
+#Compute gradient direction
 def grad_dir (gray, thresh = (0 , np.pi/2) , ksize = 11):
 
     #sobel x
@@ -61,41 +61,38 @@ def grad_dir (gray, thresh = (0 , np.pi/2) , ksize = 11):
     binary_output [ (gradDir >= thresh[0]) & (gradDir <= thresh[1])] =1
 
     return binary_output
-
+#Construct the combined graidents thresholding
 def grad_combined (img):
 
     #grayscale
     gray = cv2.cvtColor(img,cv2.COLOR_RGB2GRAY)
 
     #Sobelx
-    sobelx = grad_xy (gray,1,(70,255),7)
+    sobelx = grad_xy (gray,1,(30,255),9)
 
     #Sobely
-    sobely = grad_xy (gray,0,(70,255),7)
-
-    #Magnitude
-    sobelMagn = grad_magn (gray,(70,255),7)
-
-    #Gradient Direction
-    gradDir = grad_dir (gray,(0.7,1.3),15)
+    sobely = grad_xy (gray,0,(30,255),9)
 
     #Combined mask
     combined = np.zeros_like(gray)
-    combined [ ((sobelx == 1) & (sobely == 1)) |\
-              ((sobelMagn ==1) & (gradDir ==1)) ]  =1
+    combined [ ((sobelx == 1) & (sobely == 1)) ]  = 1
 
     return combined
-
+#HLS color space thresholding
 def hlsThresh (img , thresh = (0,255)):
+
     #Convert to hls color space
     hls = cv2.cvtColor(img,cv2.COLOR_RGB2HLS)
 
+    #Select v channel
+    v = hls[:,:,1]
 
     #Select S channel
     s = hls[:,:,2]
 
+
     #Create binary output image
     hls_binary = np.zeros_like (s)
-    hls_binary [ (s >= thresh[0]) & (s <= thresh[1])] =1
+    hls_binary [ ((s >= thresh[0]) & (s <= thresh[1])) & ((v>= 100) & (v<=255))] =1
 
     return hls_binary

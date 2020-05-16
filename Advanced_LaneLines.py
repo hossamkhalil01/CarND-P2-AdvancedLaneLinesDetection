@@ -6,31 +6,28 @@ import glob
 import pickle
 from numpy.linalg import inv
 from moviepy.editor import VideoFileClip
-import grad_color_combo as thresh  #Thresholding file
+import grad_color_combo as thresh  #Binary Thresholding file
 
-# #To update the parameters of each frame 
-# class Line():
-#     def __init__(self):
-#         # was the line detected in the last iteration?
-#         self.detected = False
-#         # x values of the last n fits of the line
-#         self.recent_xfitted = []
-#         #average x values of the fitted line over the last n iterations
-#         self.bestx = None
-#         #polynomial coefficients averaged over the last n iterations
-#         self.best_fit = None
-#         #polynomial coefficients for the most recent fit
-#         self.current_fit = [np.array([False])]
-#         #radius of curvature of the line in some units
-#         self.radius_of_curvature = None
-#         #distance in meters of vehicle center from the line
-#         self.line_base_pos = None
-#         #difference in fit coefficients between last and new fits
-#         self.diffs = np.array([0,0,0], dtype='float')
-#         #x values for detected line pixels
-#         self.allx = None
-#         #y values for detected line pixels
-#         self.ally = None
+
+
+#To update the parameters of each frame
+class Line():
+    def __init__(self):
+
+        # was the line detected in the last iteration?
+        self.detected = False
+
+        # coefficients values of the last N fits of the line
+        self.recent_fits = []
+
+        #polynomial coefficients averaged over the last n iterations
+        self.best_fit = None
+
+        #polynomial coefficients for the most recent fit
+        self.current_fit = [np.array([False])]
+
+        #radius of curvature of the line in some units
+        self.radius_of_curvature = None
 #Undistort the image
 def undistortImage (img, cmt,dist):
 
@@ -44,26 +41,29 @@ def BirdsEye_view (img):
     h = img.shape[0]
     w = img.shape[1]
 
-    # src = np.array ([
-    #     [202,718],
-    #     [567,460],
-    #     [720,460],
-    #     [1099,718]
-    # ],np.float32)
+    #Posotion as a ratio of the width and heigh of image
+    x1_pos_ratio = 0.15
+    x2_pos_ratio = 0.45
+    y_pos_ratio = 0.64
 
     src = np.array ([
-        [200,719],
-        [580,460],
-        [710,460],
-        [1106,719]
+        [int(x1_pos_ratio*w),h-1],
+        [int(x2_pos_ratio*w),int(y_pos_ratio*h)],
+        [int((1-x2_pos_ratio)*w),int(y_pos_ratio*h)],
+        [int((1-x1_pos_ratio)*w),h-1]
     ],np.float32)
+
+
     #destination points selection
+    x_ratio = 0.25
+
     dst = np.array ([
-        [320,h-1],
-        [320,0],
-        [960,0],
-        [960,h-1]
+        [x_ratio*w,h-1],
+        [x_ratio*w,0],
+        [((1-x_ratio)*w),0],
+        [((1-x_ratio)*w),h-1]
     ],np.float32)
+
 
     #Plot selected points (if needed)
     # plt.imshow(img,cmap='gray')
@@ -84,8 +84,8 @@ def thresh_combo (img):
     #Combined Gradient
     grad = thresh.grad_combined(img)
 
-    #HLS S channel threshold
-    hls_select = thresh.hlsThresh(img, (180,240))
+    #HLS threshold
+    hls_select = thresh.hlsThresh(img, (130,255))
 
 
     #Combined Color and Gradient
@@ -189,31 +189,84 @@ def find_lane_pixels (binaryImg):
     righty = pix_y [right_lane_ind]
 
     return leftx, lefty, rightx, righty, color_img
-#Fit the lanes in a polynomial
-def lane_fitting (binaryImg):
+#find lane line by searching previous fitted lines
+def search_around_poly(binaryImg,prev_left_fit,prev_right_fit):
 
-    # Find lane pixels
-    leftx, lefty, rightx, righty, img = find_lane_pixels(binaryImg)
+    #Margin to search around fitted poly
+    margin = 100
 
-    #Fit 2nd degree polynomial
-    left_fit  = np.polyfit(lefty,leftx,2)
-    right_fit = np.polyfit(righty,rightx,2)
+    #relevent non zero pixels indices in the frame
+    pix_ind = binaryImg.nonzero()
+    pix_x = np.array(pix_ind[1])
+    pix_y = np.array(pix_ind[0])
 
-    #Plot the fitted polynomials
-    #Y-axis
-    y = np.linspace(0, binaryImg.shape[0]-1, binaryImg.shape[0])
+    #Extract non zero pixels indecies around each fitted poly
 
-    # X = A y**2 + By + C
-    #X-axis for left and right lanes
-    left_polyx  = left_fit[0]*(y**2) + left_fit[1]*y + left_fit[2]
-    right_polyx = right_fit[0]*(y**2) + right_fit[1]*y + right_fit[2]
+    left_ind = ((pix_x > (prev_left_fit[0]*pix_y**2) + (prev_left_fit[1]*pix_y) + prev_left_fit[2] - margin)&\
+                (pix_x < (prev_left_fit[0]*pix_y**2) + (prev_left_fit[1]*pix_y) + prev_left_fit[2] + margin))
 
-    #Visualization
-    #Visualize the pixels inside the window
-    img [lefty , leftx] = [255,0,0]
-    img [righty,rightx] = [0,0,255]
 
-    return img, left_polyx ,right_polyx , y
+    right_ind = ((pix_x > (prev_right_fit[0]*pix_y**2) + (prev_right_fit[1]*pix_y) + prev_right_fit[2] - margin)&\
+                 (pix_x < (prev_right_fit[0]*pix_y**2) + (prev_right_fit[1]*pix_y) + prev_right_fit[2] + margin))
+
+
+    # Left and Right lane pixels positions
+    new_leftx  = pix_x [left_ind]
+    new_lefty  = pix_y [left_ind]
+    new_rightx = pix_x [right_ind]
+    new_righty = pix_y [right_ind]
+
+
+    return new_leftx, new_lefty, new_rightx, new_righty
+#Fit the lanes in a polynomial (default is to fit using sliding window)
+def lane_fitting (binaryImg,prev_available ='False',leftline = None ,rightline = None):
+
+    #Check for previous poly fits
+    if (prev_available): #Previous lane fit found
+        #Find new lane pixels position
+        leftx, lefty, rightx, righty = search_around_poly(binaryImg, leftline, rightline)
+
+        #Fit 2nd degree polynomial
+        left_fit  = np.polyfit(lefty,leftx,2)
+        right_fit = np.polyfit(righty,rightx,2)
+
+        #Plot the fitted polynomials
+        #Y-axis
+        y = np.linspace(0, binaryImg.shape[0]-1, binaryImg.shape[0])
+
+        # X = A y**2 + By + C
+        #X-axis for left and right lanes
+        left_polyx  = left_fit[0]*(y**2) + left_fit[1]*y + left_fit[2]
+        right_polyx = right_fit[0]*(y**2) + right_fit[1]*y + right_fit[2]
+
+
+        return y, left_polyx ,right_polyx , None
+
+
+    else :    #First frame (use sliding windows)
+
+        # Find lane pixels position
+        leftx, lefty, rightx, righty,img = find_lane_pixels(binaryImg)
+
+        #Fit 2nd degree polynomial
+        left_fit  = np.polyfit(lefty,leftx,2)
+        right_fit = np.polyfit(righty,rightx,2)
+
+        #Plot the fitted polynomials
+        #Y-axis
+        y = np.linspace(0, binaryImg.shape[0]-1, binaryImg.shape[0])
+
+        # X = A y**2 + By + C
+        #X-axis for left and right lanes
+        left_polyx  = left_fit[0]*(y**2) + left_fit[1]*y + left_fit[2]
+        right_polyx = right_fit[0]*(y**2) + right_fit[1]*y + right_fit[2]
+
+        #Visualization
+        #Visualize the pixels inside the window
+        img [lefty , leftx] = [255,0,0]
+        img [righty,rightx] = [0,0,255]
+
+        return y, left_polyx ,right_polyx , img
 #Compute curvature radius and offset from center
 def compute_curvatureAndOffset(width,y,left_fit,right_fit):
     #from pixel to meters conversion
@@ -278,11 +331,6 @@ def drawResults (undistImg, warpedImg, mtx,poly_y , left_fitx, right_fitx):
 #Image Lane detection pipline
 def Lane_detection(img):
 
-    #Load the camera calibration variables
-    dist_pickle = pickle.load( open( "camera_cal/calib_mtx.p", "rb" ) )
-
-    cmt = dist_pickle["cmt"]
-    dist = dist_pickle["dist"]
 
     # #Visualize Original Image if needed
     # plt.figure(1)
@@ -316,7 +364,7 @@ def Lane_detection(img):
     #
     # #Save Image
     # plt.imsave('output_images/combo_thresh.jpg', binary_img,cmap='gray')
-    #
+
 
     ######################################
     #### 3. Bird's-Eye View Transform ####
@@ -331,18 +379,67 @@ def Lane_detection(img):
     # #Save Image
     # plt.imsave('output_images/BirdEye_view.jpg', warped_img,cmap='gray')
 
+
     ################################
     ###### 4. Lane Fitting #########
     ################################
-    fit_img , left , right , poly_y = lane_fitting(warped_img)
 
-    #Visualize the fitted ploynomials
+    #If previous fit is found
+    if (leftline_obj.detected) and (rightline_obj.detected):
+
+        poly_y , leftline_obj.current_fit , rightline_obj.current_fit , fit_img = lane_fitting(warped_img ,True ,leftline_obj.current_fit ,rightline_obj.current_fit)
+
+    else:
+        poly_y , leftline_obj.current_fit , rightline_obj.current_fit , fit_img = lane_fitting(warped_img ,False)
+
+
+
+    #Activate the fit detected variable
+    if len(leftline_obj.current_fit) > 0 & len(poly_y) >0:
+        leftline_obj.detected = True
+
+    if len(rightline_obj.current_fit) > 0 & len(poly_y) > 0:
+        rightline_obj.detected = True
+
+    else :
+        leftline_obj.detected  = False
+        rightline_obj.detected = False
+
+
+    #Append the current coeeficients fits values
+    leftline_obj.recent_fits .append(leftline_obj.current_fit)
+    rightline_obj.recent_fits .append(rightline_obj.current_fit)
+
+
+    #################################
+    #### 4.1 Smoothing the curve ####
+    #################################
+
+    #Number of frames to be averaged
+    Number_of_frames = 5
+
+    #delete the oldest value in the fits list if the length > Number of frames
+    if len(leftline_obj.recent_fits) > Number_of_frames:
+
+        leftline_obj.recent_fits.pop(0)
+
+
+    if len(rightline_obj.recent_fits) > Number_of_frames:
+
+        rightline_obj.recent_fits.pop(0)
+
+    #Average the last N coefficients
+    leftline_obj.best_fit =  np.average((leftline_obj.recent_fits),axis = 0)
+    rightline_obj.best_fit =  np.average((rightline_obj.recent_fits),axis = 0)
+
+
+
     # #Visualize and save image if needed
     # plt.figure(5)
     # plt.imshow(fit_img,cmap='gray')
     # plt.title('Fitted Lane Lines')
-    # plt.plot(left, poly_y, color='yellow')
-    # plt.plot(right,poly_y, color='yellow')
+    # plt.plot(leftline_obj.best_fit, poly_y, color='yellow')
+    # plt.plot(rightline_obj.best_fit,poly_y, color='yellow')
     #
     # #Save Image
     # plt.savefig('output_images/Fitted_LaneLines.jpg')
@@ -351,16 +448,18 @@ def Lane_detection(img):
     ###### 6. Compute Curvature and Cetner Offset #########
     #######################################################
 
-    left_curvR , right_curvR , offset = compute_curvatureAndOffset(undist_img.shape[1],poly_y,left,right)
-    #Mean of left and right radius
-    mean_curvR = (left_curvR+right_curvR)/2
+    #Store the new curvature radius values and offset
+    leftline_obj.radius_of_curvature  , rightline_obj.radius_of_curvature , offset = compute_curvatureAndOffset(undist_img.shape[1],poly_y,leftline_obj.best_fit,rightline_obj.best_fit)
+
+    #Compute the mean of left and right radius
+    mean_curvR = (leftline_obj.radius_of_curvature + rightline_obj.radius_of_curvature)/2
 
 
     ############################################################
     ###### 7. Draw lines on origianl undistorted Image #########
     ############################################################
 
-    final_img =  drawResults (undist_img, warped_img, mtx, poly_y, left, right)
+    final_img =  drawResults (undist_img, warped_img, mtx, poly_y, leftline_obj.best_fit, rightline_obj.best_fit)
 
     #Print the output values on the image
     text1 = "Radius of Curvature = "+str(int(mean_curvR))+"m"
@@ -377,7 +476,7 @@ def Lane_detection(img):
     #print offset value
     cv2.putText(final_img, text2, pos_2,font,2,(255,255,255),2,cv2.LINE_AA)
 
-    ##Visualize and save image if needed
+    # #Visualize and save image if needed
     # plt.figure(6)
     # plt.imshow(final_img)
     # plt.title('Lane Detection')
@@ -400,22 +499,36 @@ dist_pickle = pickle.load( open( "camera_cal/calib_mtx.p", "rb" ) )
 cmt = dist_pickle["cmt"]
 dist = dist_pickle["dist"]
 
-#Load test image
-testimg = im.imread('test_images/straight_lines2.jpg')
 
-# #Perform lane detection
-# final_img = Lane_detection(testimg,cmt,dist)
+########################################
+### Init left and right lines object####
+########################################
+leftline_obj = Line()
+rightline_obj = Line()
 
-##################
-### Load Video ###
-##################
 
+############################
+### Image lane detection ###
+############################
+
+# #Load test image
+# testimg = im.imread('test_images/test4.jpg')
+#
+# #Image Lane detection
+# final_img = Lane_detection(testimg)
+
+
+
+
+############################
+### Video lane detection ###
+############################
+
+#Load video
 in_clip = VideoFileClip('test_vids/project_video.mp4')
 
-output_path = 'output_vids/project_video.mp4'
-
-#The output video
+#Process video
 out_clip = in_clip.fl_image(Lane_detection)
 
-#Save Processed video
-out_clip.write_videofile(output_path, audio=False)
+#Save the result video
+out_clip.write_videofile( 'output_vids/project_video.mp4', audio=False)
