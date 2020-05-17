@@ -85,7 +85,7 @@ def hlsThresh (img , thresh = (0,255)):
     hls = cv2.cvtColor(img,cv2.COLOR_RGB2HLS)
 
     #Select v channel
-    v = hls[:,:,1]
+    l = hls[:,:,1]
 
     #Select S channel
     s = hls[:,:,2]
@@ -93,6 +93,6 @@ def hlsThresh (img , thresh = (0,255)):
 
     #Create binary output image
     hls_binary = np.zeros_like (s)
-    hls_binary [ ((s >= thresh[0]) & (s <= thresh[1])) & ((v>= 100) & (v<=255))] =1
+    hls_binary [ ((s >= thresh[0]) & (s <= thresh[1])) & ((l>= 100) & (l<=255))] =1
 
     return hls_binary
